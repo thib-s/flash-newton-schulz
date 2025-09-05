@@ -10,6 +10,7 @@ the fused operation C = a * X + B @ X which is used in the Newton-Schulz iterati
 
 MIT License © Microsoft and contributors (Dion project) & thib-s (this file adaptations)
 """
+
 import torch
 import triton
 import triton.language as tl
@@ -473,7 +474,7 @@ def ns_line_3(B: Tensor, X: Tensor, a: float, *, out: Tensor = None) -> Tensor:
 
 
 @torch.compile(dynamic=False, fullgraph=True)
-def  newton_schulz_torch(G: Tensor, epsilon: float = 1e-7):
+def newton_schulz_torch(G: Tensor, epsilon: float = 1e-7):
     """
     Reference implementation of Newton-Schulz without Triton.
     """
@@ -501,6 +502,7 @@ def  newton_schulz_torch(G: Tensor, epsilon: float = 1e-7):
     if G.size(-2) > G.size(-1):
         X = X.mT
     return X
+
 
 @torch.compile(dynamic=False, fullgraph=True)
 def newton_schulz_triton_dion(G: Tensor, epsilon: float = 1e-7):
@@ -542,6 +544,7 @@ def newton_schulz_triton_dion(G: Tensor, epsilon: float = 1e-7):
         X = X.mT
     return X
 
+
 @torch.compile(dynamic=False, fullgraph=True)
 def newton_schulz_triton_aol(G: Tensor, epsilon: float = 1e-7):
     """
@@ -552,7 +555,7 @@ def newton_schulz_triton_aol(G: Tensor, epsilon: float = 1e-7):
         [4.6051846, -9.6552305, 5.676981],
         [4.750538, -6.086122, 2.1790226],
         [2.776319, -2.3190296, 0.55232877],
-        [2.423169, -2.2861216, 0.81937317]
+        [2.423169, -2.2861216, 0.81937317],
     ]
     X = G.to(dtype=torch.bfloat16)
     if G.size(-2) > G.size(-1):
@@ -579,7 +582,9 @@ def newton_schulz_triton_aol(G: Tensor, epsilon: float = 1e-7):
     X = X * torch.rsqrt(s)  # rescale X using s making it closer to orthogonal
     # first NS iteration with reuse of A
     a, b, c = ns_consts[0]
-    A = s.transpose(-2, -1) * A * s   # rescale A with s^2 as it is cheaper than computing ns_line_1 again
+    A = (
+        s.transpose(-2, -1) * A * s
+    )  # rescale A with s^2 as it is cheaper than computing ns_line_1 again
     ns_line_2(A, alpha=c, beta=b, out=B)
     ns_line_3(B, X, a, out=C)
     X, C = C, X

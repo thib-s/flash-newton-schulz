@@ -1,6 +1,6 @@
 import math, torch
 from torch import Tensor
-from flash_muon.newton_schulz_triton import ns_line_1, ns_line_2, ns_line_3
+from newton_schulz_triton import ns_line_1, ns_line_2, ns_line_3
 
 
 # ------------------------------------------------------------
@@ -18,8 +18,6 @@ def orthogonality_error(X: Tensor) -> Tensor:
         I = torch.eye(n, device=X.device, dtype=torch.float32).expand(gram.shape)
         dim = n
     return torch.linalg.norm(gram - I, ord="fro", dim=(-2, -1)).mean() / math.sqrt(dim)
-
-
 
 
 def levy_stable(alpha, beta, size, device="cpu", generator=None):
@@ -51,7 +49,6 @@ def levy_stable(alpha, beta, size, device="cpu", generator=None):
     term2 = (torch.cos(U - alpha * (U + B)) / W) ** ((1 - alpha) / alpha)
 
     return S * frac * term2
-
 
 
 # ------------------------------------------------------------
@@ -90,7 +87,9 @@ def ns_run_with_consts(
     )  # AOL rescaling vector
     X = X * torch.rsqrt(s)  # rescale X using s making it closer to orthogonal
     # first NS iteration with reuse of A
-    A = s.transpose(-2, -1) * A * s   # rescale A with s^2 as it is cheaper than computing ns_line_1 again
+    A = (
+        s.transpose(-2, -1) * A * s
+    )  # rescale A with s^2 as it is cheaper than computing ns_line_1 again
     ns_line_2(A, alpha=c, beta=b, out=B)
     ns_line_3(A, X, a, out=C)
     X, C = C, X
@@ -135,7 +134,11 @@ def make_eval_pool(
         for m, n in shapes:
             for alpha in [1.5, 1.75]:  # Levy alpha-stable with varying alpha
                 G = levy_stable(
-                    alpha=alpha, beta=0, size=(batch_per_shape, m, n), device=device, generator=gen
+                    alpha=alpha,
+                    beta=0,
+                    size=(batch_per_shape, m, n),
+                    device=device,
+                    generator=gen,
                 )
                 pool.append(G)
             G = torch.randn(
@@ -223,7 +226,7 @@ seed_consts = torch.tensor(
         [4.6051846, -9.6552305, 5.676981],
         [4.750538, -6.086122, 2.1790226],
         [2.776319, -2.3190296, 0.55232877],
-        [2.423169, -2.2861216, 0.81937317]
+        [2.423169, -2.2861216, 0.81937317],
     ],
     device="cpu",
 ).flatten()

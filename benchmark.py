@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 """
 Benchmark for Newton-Schulz variants.
@@ -18,6 +17,7 @@ On first run, `torch.compile` and Triton autotuning may add overhead during warm
 
 This code was insipired by the benchmark code from flash-muon: https://github.com/nil0x9/flash-muon/tree/main
 """
+
 import argparse
 import time
 from collections import defaultdict
@@ -56,14 +56,20 @@ def orthogonality_error(X: torch.Tensor) -> float:
         gram = (X.mT @ X).to(torch.float32)
         I = torch.eye(n, device=X.device, dtype=torch.float32).expand(gram.shape)
         dim = n
-    return (torch.linalg.norm(gram - I, ord="fro", dim=(-2, -1)).mean() / (dim ** 0.5)).item()
+    return (
+        torch.linalg.norm(gram - I, ord="fro", dim=(-2, -1)).mean() / (dim**0.5)
+    ).item()
 
 
 def sv_stats(X: torch.Tensor):
     """Return (p02, p50, p98) of singular values of X (fp32)."""
     S = torch.linalg.svdvals(X.to(torch.float32))
     p = torch.tensor([0.02, 0.50, 0.98], device=X.device, dtype=torch.float32)
-    q = torch.quantile(S, p, dim=-1).mean(dim=1) if S.ndim == 2 else torch.quantile(S, p)
+    q = (
+        torch.quantile(S, p, dim=-1).mean(dim=1)
+        if S.ndim == 2
+        else torch.quantile(S, p)
+    )
     return tuple(float(v) for v in q)
 
 
@@ -78,7 +84,7 @@ def make_batch(batch, m, n, dtype, device, seed=0, dist_type="levy"):
             device=device, dtype=dtype
         )
     elif dist_type == "uniform":
-        X = (torch.rand((batch, m, n), generator=gen, device=device, dtype=dtype) - 0.5)
+        X = torch.rand((batch, m, n), generator=gen, device=device, dtype=dtype) - 0.5
     elif dist_type == "normal":
         X = torch.randn((batch, m, n), generator=gen, device=device, dtype=dtype)
     else:
@@ -100,7 +106,6 @@ def time_fn(fn, x, warmup, rep, synchronize=True):
         torch.cuda.synchronize()
     elapsed = (time.perf_counter() - start) * 1000.0 / rep  # ms
     return y, elapsed
-
 
 
 def levy_stable(alpha, beta, size, device="cpu"):
@@ -134,23 +139,50 @@ def levy_stable(alpha, beta, size, device="cpu"):
     return S * frac * term2
 
 
-
 # ------------------------- Main -------------------------
 def main():
-    parser = argparse.ArgumentParser(description="Benchmark Newton-Schulz implementations")
-    parser.add_argument("--dims", type=int, nargs="+", default=[128, 256, 512, 1024],
-                        help="Square sizes to benchmark (m=n)")
+    parser = argparse.ArgumentParser(
+        description="Benchmark Newton-Schulz implementations"
+    )
+    parser.add_argument(
+        "--dims",
+        type=int,
+        nargs="+",
+        default=[128, 256, 512, 1024],
+        help="Square sizes to benchmark (m=n)",
+    )
     parser.add_argument("--batch", type=int, default=32, help="Batch size per shape")
-    parser.add_argument("--dtype", type=str, default="bfloat16", choices=["float16", "bfloat16", "float32"])
-    parser.add_argument("--rep", type=int, default=5, help="Number of timed repetitions")
-    parser.add_argument("--warmup", type=int, default=4, help="Warmup runs before timing")
-    parser.add_argument("--dist-type", type=str, default="levy", choices=["levy", "uniform", "normal"],
-    parser.add_argument("--no-plot", dest="plot", action="store_false", help="Disable SV plots")
-    parser.add_argument("--csv", type=str, default="", help="Optional path to save CSV results")
-    parser.add_argument("--seed", type=int, default=0, help="Random seed for input generation")
+    parser.add_argument(
+        "--dtype",
+        type=str,
+        default="bfloat16",
+        choices=["float16", "bfloat16", "float32"],
+    )
+    parser.add_argument(
+        "--rep", type=int, default=5, help="Number of timed repetitions"
+    )
+    parser.add_argument(
+        "--warmup", type=int, default=4, help="Warmup runs before timing"
+    )
+    parser.add_argument(
+        "--dist-type", type=str, default="levy", choices=["levy", "uniform", "normal"]
+    )
+    parser.add_argument(
+        "--no-plot", dest="plot", action="store_false", help="Disable SV plots"
+    )
+    parser.add_argument(
+        "--csv", type=str, default="", help="Optional path to save CSV results"
+    )
+    parser.add_argument(
+        "--seed", type=int, default=0, help="Random seed for input generation"
+    )
     args = parser.parse_args()
 
-    dtype = {"float16": torch.float16, "bfloat16": torch.bfloat16, "float32": torch.float32}[args.dtype]
+    dtype = {
+        "float16": torch.float16,
+        "bfloat16": torch.bfloat16,
+        "float32": torch.float32,
+    }[args.dtype]
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Note: we call the already compiled functions; they carry @torch.compile internally.
@@ -163,26 +195,46 @@ def main():
     # Results
     bench = defaultdict(list)
     svs_cache = {}  # {(dim, name): np.ndarray of singular values}
-    print(f"\nDevice: {device_string()}  |  dtype={args.dtype}  |  batch={args.batch}\n")
+    print(
+        f"\nDevice: {device_string()}  |  dtype={args.dtype}  |  batch={args.batch}\n"
+    )
 
     for dim in args.dims:
         m = n = dim
-        X = make_batch(args.batch, m, n, dtype=dtype, device=device, seed=args.seed, uniform=args.uniform)
+        X = make_batch(
+            args.batch,
+            m,
+            n,
+            dtype=dtype,
+            device=device,
+            seed=args.seed,
+            uniform=args.uniform,
+        )
         bench["device"].append(device_string())
         bench["dim"].append((m, n))
 
         for name, fn in impls:
             try:
-                Y, t_ms = time_fn(fn, X, warmup=args.warmup, rep=args.rep, synchronize=True)
+                Y, t_ms = time_fn(
+                    fn, X, warmup=args.warmup, rep=args.rep, synchronize=True
+                )
                 err = orthogonality_error(Y)
                 p02, p50, p98 = sv_stats(Y)
             except Exception as e:
-                t_ms, err, p02, p50, p98 = float("nan"), float("nan"), float("nan"), float("nan"), float("nan")
+                t_ms, err, p02, p50, p98 = (
+                    float("nan"),
+                    float("nan"),
+                    float("nan"),
+                    float("nan"),
+                    float("nan"),
+                )
                 print(f"[WARN] {name} failed on dim {m}x{n}: {e}")
 
             bench[f"{name}_ms"].append(t_ms)
             bench[f"{name}_err"].append(err)
-            bench[f"{name}_sv(2%,50%,98%)"].append((round(p02,3), round(p50,3), round(p98,3)))
+            bench[f"{name}_sv(2%,50%,98%)"].append(
+                (round(p02, 3), round(p50, 3), round(p98, 3))
+            )
 
         # Pretty print per-dim row summary
         row = {k: bench[k][-1] for k in bench if len(bench[k]) == len(bench["dim"])}
@@ -202,7 +254,15 @@ def main():
         for dim in args.dims:
             m = n = dim
             # regenerate inputs to compute SVD bands consistently for this dim
-            X = make_batch(args.batch, m, n, dtype=dtype, device=device, seed=args.seed, dist_type=args.dist_type)
+            X = make_batch(
+                args.batch,
+                m,
+                n,
+                dtype=dtype,
+                device=device,
+                seed=args.seed,
+                dist_type=args.dist_type,
+            )
             fig = plt.figure(figsize=(8, 5))
             k = None
             for name, fn in impls:
