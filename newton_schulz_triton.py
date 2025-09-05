@@ -549,10 +549,10 @@ def newton_schulz_triton_aol(G: Tensor, epsilon: float = 1e-7):
     """
     # Newton-Schulz constants
     ns_consts = [
-        [4.0098, -7.0585, 2.4635],
-        [3.4585, -5.5479, 2.5959],
-        [2.7573, -3.2939, 1.4254],
-        [2.7215, -3.0494, 1.3169],
+        [4.6051846, -9.6552305, 5.676981],
+        [4.750538, -6.086122, 2.1790226],
+        [2.776319, -2.3190296, 0.55232877],
+        [2.423169, -2.2861216, 0.81937317]
     ]
     X = G.to(dtype=torch.bfloat16)
     if G.size(-2) > G.size(-1):
@@ -579,7 +579,7 @@ def newton_schulz_triton_aol(G: Tensor, epsilon: float = 1e-7):
     X = X * torch.rsqrt(s)  # rescale X using s making it closer to orthogonal
     # first NS iteration with reuse of A
     a, b, c = ns_consts[0]
-    A = A / s # rescale A with s^2 as it is cheaper than computing ns_line_1 again
+    A = s.transpose(-2, -1) * A * s   # rescale A with s^2 as it is cheaper than computing ns_line_1 again
     ns_line_2(A, alpha=c, beta=b, out=B)
     ns_line_3(B, X, a, out=C)
     X, C = C, X
