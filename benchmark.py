@@ -67,13 +67,22 @@ def sv_stats(X: torch.Tensor):
     return tuple(float(v) for v in q)
 
 
-def make_batch(batch, m, n, dtype, device, seed=0, uniform=False):
+def make_batch(batch, m, n, dtype, device, seed=0, dist_type="levy"):
     gen = torch.Generator(device=device)
     gen.manual_seed(seed)
-    if uniform:
+    if dist_type == "levy":
+        # here alpha=1.5 but should work on settings with varying alpha
+        X = levy_stable(
+            alpha=1.5, beta=0, size=(8, *dim), device="cuda"
+        ).to(  # Levy alpha-stable with varying alpha
+            device=device, dtype=dtype
+        )
+    elif dist_type == "uniform":
         X = (torch.rand((batch, m, n), generator=gen, device=device, dtype=dtype) - 0.5)
-    else:
+    elif dist_type == "normal":
         X = torch.randn((batch, m, n), generator=gen, device=device, dtype=dtype)
+    else:
+        raise ValueError(f"Unknown dist_type: {dist_type}")
     return X
 
 
@@ -93,6 +102,39 @@ def time_fn(fn, x, warmup, rep, synchronize=True):
     return y, elapsed
 
 
+
+def levy_stable(alpha, beta, size, device="cpu"):
+    """
+    Generate samples from a Levy alpha-stable distribution using
+    the Chambers-Mallows-Stuck method.
+    alpha: stability parameter (0 < alpha <= 2)
+    beta: skewness parameter (-1 <= beta <= 1)
+    """
+    alpha = torch.tensor(alpha, device=device)
+    U = torch.rand(size, device=device) * torch.pi - (torch.pi / 2)
+    W = -torch.log(torch.rand(size, device=device))
+
+    if alpha == 1:
+        return (2 / torch.pi) * (
+            (torch.pi / 2 + beta * U) * torch.tan(U)
+            - beta
+            * torch.log((torch.pi / 2 * W * torch.cos(U)) / (torch.pi / 2 + beta * U))
+        )
+
+    term1 = beta * torch.tan(torch.pi * alpha / 2)
+    B = torch.atan(term1) / alpha
+    S = (1 + term1**2) ** (1 / (2 * alpha))
+
+    numerator = torch.sin(alpha * (U + B))
+    denominator = (torch.cos(U)) ** (1 / alpha)
+    frac = numerator / denominator
+
+    term2 = (torch.cos(U - alpha * (U + B)) / W) ** ((1 - alpha) / alpha)
+
+    return S * frac * term2
+
+
+
 # ------------------------- Main -------------------------
 def main():
     parser = argparse.ArgumentParser(description="Benchmark Newton-Schulz implementations")
@@ -102,7 +144,7 @@ def main():
     parser.add_argument("--dtype", type=str, default="bfloat16", choices=["float16", "bfloat16", "float32"])
     parser.add_argument("--rep", type=int, default=5, help="Number of timed repetitions")
     parser.add_argument("--warmup", type=int, default=4, help="Warmup runs before timing")
-    parser.add_argument("--uniform", action="store_true", help="Use U(-0.5,0.5) instead of N(0,1)")
+    parser.add_argument("--dist-type", type=str, default="levy", choices=["levy", "uniform", "normal"],
     parser.add_argument("--no-plot", dest="plot", action="store_false", help="Disable SV plots")
     parser.add_argument("--csv", type=str, default="", help="Optional path to save CSV results")
     parser.add_argument("--seed", type=int, default=0, help="Random seed for input generation")
@@ -160,7 +202,7 @@ def main():
         for dim in args.dims:
             m = n = dim
             # regenerate inputs to compute SVD bands consistently for this dim
-            X = make_batch(args.batch, m, n, dtype=dtype, device=device, seed=args.seed, uniform=args.uniform)
+            X = make_batch(args.batch, m, n, dtype=dtype, device=device, seed=args.seed, dist_type=args.dist_type)
             fig = plt.figure(figsize=(8, 5))
             k = None
             for name, fn in impls:

@@ -20,6 +20,40 @@ def orthogonality_error(X: Tensor) -> Tensor:
     return torch.linalg.norm(gram - I, ord="fro", dim=(-2, -1)).mean() / math.sqrt(dim)
 
 
+
+
+def levy_stable(alpha, beta, size, device="cpu", generator=None):
+    """
+    Generate samples from a Levy alpha-stable distribution using
+    the Chambers-Mallows-Stuck method.
+    alpha: stability parameter (0 < alpha <= 2)
+    beta: skewness parameter (-1 <= beta <= 1)
+    """
+    alpha = torch.tensor(alpha, device=device)
+    U = torch.rand(size, device=device, generator=generator) * torch.pi - (torch.pi / 2)
+    W = -torch.log(torch.rand(size, device=device, generator=generator))
+
+    if alpha == 1:
+        return (2 / torch.pi) * (
+            (torch.pi / 2 + beta * U) * torch.tan(U)
+            - beta
+            * torch.log((torch.pi / 2 * W * torch.cos(U)) / (torch.pi / 2 + beta * U))
+        )
+
+    term1 = beta * torch.tan(torch.pi * alpha / 2)
+    B = torch.atan(term1) / alpha
+    S = (1 + term1**2) ** (1 / (2 * alpha))
+
+    numerator = torch.sin(alpha * (U + B))
+    denominator = (torch.cos(U)) ** (1 / alpha)
+    frac = numerator / denominator
+
+    term2 = (torch.cos(U - alpha * (U + B)) / W) ** ((1 - alpha) / alpha)
+
+    return S * frac * term2
+
+
+
 # ------------------------------------------------------------
 # Newton–Schulz runner (bf16) using 4 steps, all used
 # Expects your Triton kernels: ns_line_1/2/3
@@ -56,8 +90,8 @@ def ns_run_with_consts(
     )  # AOL rescaling vector
     X = X * torch.rsqrt(s)  # rescale X using s making it closer to orthogonal
     # first NS iteration with reuse of A
-    A = b * A / s  # rescale A with s^2 as it is cheaper than computing ns_line_1 again
-    # ns_line_2(A, alpha=c, beta=b, out=B)
+    A = s.transpose(-2, -1) * A * s   # rescale A with s^2 as it is cheaper than computing ns_line_1 again
+    ns_line_2(A, alpha=c, beta=b, out=B)
     ns_line_3(A, X, a, out=C)
     X, C = C, X
 
@@ -99,6 +133,11 @@ def make_eval_pool(
     for seed in seeds:
         gen.manual_seed(seed)
         for m, n in shapes:
+            for alpha in [1.5, 1.75]:  # Levy alpha-stable with varying alpha
+                G = levy_stable(
+                    alpha=alpha, beta=0, size=(batch_per_shape, m, n), device=device, generator=gen
+                )
+                pool.append(G)
             G = torch.randn(
                 (batch_per_shape, m, n),
                 generator=gen,
@@ -181,21 +220,13 @@ def cem_optimize(
 # ------------------------------------------------------------
 seed_consts = torch.tensor(
     [
-        4.0098,
-        -7.0585,
-        2.4635,
-        3.4585,
-        -5.5479,
-        2.5959,
-        2.7573,
-        -3.2939,
-        1.4254,
-        2.7215,
-        -3.0494,
-        1.3169,
+        [4.6051846, -9.6552305, 5.676981],
+        [4.750538, -6.086122, 2.1790226],
+        [2.776319, -2.3190296, 0.55232877],
+        [2.423169, -2.2861216, 0.81937317]
     ],
     device="cpu",
-)
+).flatten()
 
 pool = make_eval_pool(device="cuda")
 
