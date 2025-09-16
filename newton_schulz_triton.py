@@ -579,7 +579,8 @@ def newton_schulz_triton_aol(G: Tensor, epsilon: float = 1e-7):
     s = torch.clamp_min(
         A.abs().sum(dim=-1, keepdim=True), min=epsilon
     )  # AOL rescaling vector
-    X = X * torch.rsqrt(s)  # rescale X using s making it closer to orthogonal
+    s = torch.rsqrt(s)
+    X = X * s  # rescale X using s making it closer to orthogonal
     # first NS iteration with reuse of A
     a, b, c = ns_consts[0]
     A = (
