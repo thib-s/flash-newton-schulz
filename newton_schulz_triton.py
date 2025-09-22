@@ -552,10 +552,10 @@ def newton_schulz_triton_aol(G: Tensor, epsilon: float = 1e-7):
     """
     # Newton-Schulz constants
     ns_consts = [
-        [4.6051846, -9.6552305, 5.676981],
-        [4.750538, -6.086122, 2.1790226],
-        [2.776319, -2.3190296, 0.55232877],
-        [2.423169, -2.2861216, 0.81937317],
+        [4.6051, -9.6552, 5.6769],
+        [4.7505, -6.0861, 2.1790],
+        [2.7763, -2.3190, 0.5523],
+        [2.4231, -2.2861, 0.8193],
     ]
     X = G.to(dtype=torch.bfloat16)
     if G.size(-2) > G.size(-1):
@@ -576,16 +576,13 @@ def newton_schulz_triton_aol(G: Tensor, epsilon: float = 1e-7):
     # starting point for the newton schulz iterations as the matrix is closer to orthogonal
     # thanks to this, we can save one iteration of newton schulz.
     ns_line_1(X, out=A)  # gram matrix A = X @ X.mT
-    s = torch.clamp_min(
-        A.abs().sum(dim=-1, keepdim=True), min=epsilon
-    )  # AOL rescaling vector
-    s = torch.rsqrt(s)
-    X = X * s  # rescale X using s making it closer to orthogonal
+    s = torch.rsqrt(torch.clamp_min(
+        A.abs().sum(dim=-1, keepdim=False), min=epsilon
+    ))  # AOL rescaling vector
+    X = X * s.unsqueeze(-1)  # rescale X using s making it closer to orthogonal
     # first NS iteration with reuse of A
     a, b, c = ns_consts[0]
-    A = (
-        s.transpose(-2, -1) * A * s
-    )  # rescale A with s^2 as it is cheaper than computing ns_line_1 again
+    A = A * s.unsqueeze(-1) * s.unsqueeze(-2)
     ns_line_2(A, alpha=c, beta=b, out=B)
     ns_line_3(B, X, a, out=C)
     X, C = C, X
