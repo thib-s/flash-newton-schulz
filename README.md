@@ -1,9 +1,6 @@
 # Turbocharging Newton-Schulz with AOL Rescaling and Triton Kernels
 
-Our attempt to improve the speed of the newton schulz algorithm, starting from the dion implementation.
-
-Disclaimer: this work is still in progress, especially we want to highlight that this approach change the 
-underlying algorithm. So extra verification should be done before integrating it in optimizers like dion/muon.
+Our attempt to improve the speed of the newton schulz algorithm.
 
 ## Changes
 
