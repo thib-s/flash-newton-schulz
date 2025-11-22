@@ -34,7 +34,7 @@ torch.backends.cudnn.benchmark = True
 from ns_variants import (
     NS_aol_standard,
     NS_aol_conv,
-    NS_dion,
+    NS_muon_plus,
     NS_muon_triton,
     NS_muon_torch,
 )
@@ -46,7 +46,7 @@ parser.add_argument(
     "--ns_variant",
     type=str,
     default="muon_torch",
-    choices=["aol_standard", "aol_conv", "dion", "muon_triton", "muon_torch"],
+    choices=["aol_standard", "aol_conv", "muon+", "muon_triton", "muon_torch"],
     help="Variant of Newton-Schulz to use for Muon optimizer",
 )
 parser.add_argument(
@@ -75,7 +75,7 @@ args = parser.parse_args()
 ortho_fn = {
     "aol_standard": NS_aol_standard,
     "aol_conv": NS_aol_conv,
-    "dion": NS_dion,
+    "muon+": NS_muon_plus,
     "muon_triton": NS_muon_triton,
     "muon_torch": NS_muon_torch,
 }[args.ns_variant]

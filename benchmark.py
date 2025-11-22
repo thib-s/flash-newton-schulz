@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import torch
 from tqdm import tqdm
-from newton_schulz_triton import NS_muon, NS_dion, NS_ours  # noqa: F401
+from newton_schulz_triton import NS_muon, NS_muon_plus, NS_ours  # noqa: F401
 from torch.linalg import LinAlgError
 
 pd.set_option("display.float_format", "{:.3f}".format)
@@ -176,8 +176,8 @@ def time_fn(
 # ------------------------- Main experiment -------------------------
 ALGOS: Dict[str, callable] = {
     "Muon": NS_muon,
-    "Dion": NS_dion,
-    "AOLxDion": NS_ours,
+    "Muon+": NS_muon_plus,
+    "AOLxMuon+": NS_ours,
 }
 
 
@@ -385,7 +385,7 @@ if __name__ == "__main__":
 #     * polar_error         = ||X - Q||_F / ||Q||_F where Q is the polar factor of the *input* G
 #     * sv_p02 / sv_p50 / sv_p98 of each output sample
 # - Supports batched inputs (one random batch per size), avoiding outer loops over seeds.
-# - Assumes 3 algorithms with an `iter` parameter in [1..5]: NS_muon, NS_dion, NS_ours.
+# - Assumes 3 algorithms with an `iter` parameter in [1..5]: NS_muon, NS_muon_plus, NS_ours.
 
 # Results are returned and optionally saved as a pandas DataFrame (one row per *sample*).
 
@@ -412,7 +412,7 @@ if __name__ == "__main__":
 # import pandas as pd
 # import torch
 # from tqdm import tqdm
-# from newton_schulz_triton import NS_muon, NS_dion, NS_ours  # noqa: F401
+# from newton_schulz_triton import NS_muon, NS_muon_plus, NS_ours  # noqa: F401
 # from torch.linalg import LinAlgError
 
 # pd.set_option("display.float_format", "{:.3f}".format)
@@ -562,7 +562,7 @@ if __name__ == "__main__":
 # # ------------------------- Main experiment -------------------------
 # ALGOS: Dict[str, callable] = {
 #     "NS_muon": NS_muon,
-#     "NS_dion": NS_dion,
+#     "NS_muon_plus": NS_muon_plus,
 #     "NS_ours": NS_ours,
 # }
 

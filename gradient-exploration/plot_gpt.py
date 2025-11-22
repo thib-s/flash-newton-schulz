@@ -10,7 +10,7 @@ from matplotlib.lines import Line2D
 
 from ns_variants.flash_ns import (
     newton_schulz_torch,
-    newton_schulz_triton_dion,  # available if you enable it below
+    newton_schulz_triton_muon_plus,  # available if you enable it below
     newton_schulz_triton_aol,
 )
 from ns_variants import polar_express, reference_ns
@@ -19,13 +19,13 @@ from ns_variants import polar_express, reference_ns
 ns_impls = [
     "aol",
     "muon",
-    # "dion",  # uncomment if you have grads/dion and want it included
+    # "muon+",  # uncomment if you have grads/muon+ and want it included
     "std_pe",
     # "aol_pe",
 ]
 ns_impl = {
     "aol": newton_schulz_triton_aol,
-    # "dion": newton_schulz_triton_dion,
+    # "muon+": newton_schulz_triton_muon_plus,
     "muon": newton_schulz_torch,
     "std_pe": partial(polar_express, aol=False),
     # "aol_pe": partial(polar_express, aol=True),
@@ -106,7 +106,7 @@ if not df.empty and "step" in df:
 # --- plot: steps vs polar_error, color=val_loss (log), marker by impl ---
 markers = {
     "aol": "o",
-    # "dion": "s",
+    # "muon+": "s",
     "muon": "s",
     "std_pe": "^",
     # "aol_pe": "D",

@@ -14,7 +14,7 @@ import torch.nn.functional as F
 import torch.distributed as dist
 from .flash_ns import (
     newton_schulz_torch,
-    newton_schulz_triton_dion,
+    newton_schulz_triton_muon_plus,
     newton_schulz_triton_aol,
 )
 from .polar_express import polar_express
@@ -94,7 +94,7 @@ class MuonWithAuxAdam(torch.optim.Optimizer):
                 )
         self.update_fn = {
             "standard": newton_schulz_torch,
-            "dion": newton_schulz_triton_dion,
+            "muon+": newton_schulz_triton_muon_plus,
             "aol": newton_schulz_triton_aol,
             "polar_express_standard": polar_express,
             "polar_express_aol": partial(polar_express, aol=True),

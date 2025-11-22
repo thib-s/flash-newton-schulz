@@ -542,7 +542,7 @@ def NS_muon_triton(G: Tensor, ns_consts: list, epsilon: float = 1e-7, dtype=torc
 
 
 @torch.compile(dynamic=False, fullgraph=True)
-def NS_dion(G: Tensor, ns_consts, epsilon: float = 1e-7, dtype=torch.bfloat16):
+def NS_muon_plus(G: Tensor, ns_consts, epsilon: float = 1e-7, dtype=torch.bfloat16):
     """
     Triton implementation of Newton-Schulz iteration
     """

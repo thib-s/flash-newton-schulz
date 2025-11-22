@@ -493,7 +493,7 @@ def ns_line_3(B: Tensor, X: Tensor, a: float, *, out: Tensor = None) -> Tensor:
 
 
 @torch.compile(dynamic=False, fullgraph=True)
-def ns_AOLxDion(G: Tensor, iter=4, epsilon: float = 1e-7, dtype=torch.bfloat16):
+def ns_AOLxMuon_plus(G: Tensor, iter=4, epsilon: float = 1e-7, dtype=torch.bfloat16):
     """
     Triton implementation of Newton-Schulz iteration
     """
@@ -631,7 +631,7 @@ def update(
     assert acc_bf16_view_u16.dtype == mantissa.dtype == torch.uint16
     grad = grad.float()
     momentum_buffer.copy_(momentum * momentum_buffer + (1 - momentum) * grad)
-    v = ns_AOLxDion(momentum * momentum_buffer + (1 - momentum) * grad)
+    v = ns_AOLxMuon_plus(momentum * momentum_buffer + (1 - momentum) * grad)
 
     update_smoothing_buffer.copy_(
         update_smoothing * update_smoothing_buffer + (1 - update_smoothing) * v

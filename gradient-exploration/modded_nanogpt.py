@@ -498,7 +498,7 @@ def ns_line_3(B: Tensor, X: Tensor, a: float, *, out: Tensor = None) -> Tensor:
 
 
 @torch.compile(dynamic=False, fullgraph=True)
-def NS_AOLxDion(G: Tensor, iter=4, epsilon: float = 1e-7, dtype=torch.bfloat16):
+def NS_AOLxMuon_plus(G: Tensor, iter=4, epsilon: float = 1e-7, dtype=torch.bfloat16):
     """
     Triton implementation of Newton-Schulz iteration
     """
@@ -622,7 +622,7 @@ class Snoo:
 import argparse
 from ns_variants.flash_ns import (
     newton_schulz_torch,
-    newton_schulz_triton_dion,
+    newton_schulz_triton_muon_plus,
     newton_schulz_triton_aol,
 )
 from ns_variants import polar_express
@@ -632,15 +632,15 @@ parser.add_argument(
     "--ns_impl",
     type=str,
     required=True,
-    choices=["aol", "dion", "std_pe", "aol_pe", "muon"],
+    choices=["aol", "muon+", "std_pe", "aol_pe", "muon"],
 )
 parser.add_argument("--save_every", type=int, default=1000)
 cmd_args = parser.parse_args()
 
 ns_impl = {
-    "aol": NS_AOLxDion,
+    "aol": NS_AOLxMuon_plus,
     "muon": newton_schulz_torch,
-    "dion": newton_schulz_triton_dion,
+    "muon+": newton_schulz_triton_muon_plus,
     "std_pe": partial(polar_express, aol=False),
     "aol_pe": partial(polar_express, aol=True),
 }[cmd_args.ns_impl]

@@ -45,9 +45,9 @@ from matplotlib.ticker import ScalarFormatter, LogFormatter, MaxNLocator
 # Selected (algo, iter) to show on the two per-size plots
 WANTED: Tuple[Tuple[str, int], ...] = (
     ("Muon", 5),
-    ("Dion", 5),
-    ("AOLxDion", 5),
-    ("AOLxDion", 4),
+    ("Muon+", 5),
+    ("AOLxMuon+", 5),
+    ("AOLxMuon+", 4),
 )
 
 # ------------------ Centralized style registry (NO FALLBACKS) ------------------
@@ -55,8 +55,8 @@ WANTED: Tuple[Tuple[str, int], ...] = (
 # Keys must match the 'algo' values in your CSV exactly.
 ALG_STYLE: Dict[str, Dict[str, str]] = {
     "Muon": {"color": "#009E73", "marker": "o", "linestyle": "solid"},  # green
-    "Dion": {"color": "#0072B2", "marker": "s", "linestyle": "solid"},  # blue
-    "AOLxDion": {"color": "#56B4E9", "marker": "D", "linestyle": "solid"},  # sky blue
+    "Muon+": {"color": "#0072B2", "marker": "s", "linestyle": "solid"},  # blue
+    "AOLxMuon+": {"color": "#56B4E9", "marker": "D", "linestyle": "solid"},  # sky blue
 }
 
 
@@ -211,8 +211,8 @@ def plot_polar_error_lines(ax, agg: pd.DataFrame):
         yerr = sub["std_polar_error"].fillna(0).to_numpy(dtype=float)
 
         c, m, linestyle = style_for_algo(algo, iter_value=it)
-        # exception for AOLxDion iter=4 to distinguish from iter=5
-        if algo == "AOLxDion" and it == 4:
+        # exception for AOLxMuon+ iter=4 to distinguish from iter=5
+        if algo == "AOLxMuon+" and it == 4:
             linestyle = "dotted"
 
         ax.plot(x, y, marker=m, label=label, color=c, linestyle=linestyle)
@@ -256,7 +256,7 @@ def plot_speedup_bars(
     Horizontal grouped bars only:
     - Matrix size on Y axis (group per size)
     - Speedup on X axis
-    - Each bar labeled with algorithm name and separate numeric value (e.g., 'AOLxDion (iter=4)' inside, '2.3x' outside)
+    - Each bar labeled with algorithm name and separate numeric value (e.g., 'AOLxMuon_plus (iter=4)' inside, '2.3x' outside)
     - No legend, no vertical bars
     """
     agg_display = agg.copy()
@@ -290,7 +290,7 @@ def plot_speedup_bars(
     height = min(0.8 / max(n, 1), 0.22)
     offsets = (np.arange(n) - (n - 1) / 2) * (height + 0.01)
 
-    hatch_map = {("AOLxDion", 4): "///"}
+    hatch_map = {("AOLxMuon+", 4): "///"}
     global_max = 0.0
 
     for i, (algo, it) in enumerate(groups):

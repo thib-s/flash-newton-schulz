@@ -505,7 +505,7 @@ def newton_schulz_torch(G: Tensor, epsilon: float = 1e-7):
 
 
 # @torch.compile(dynamic=False, fullgraph=True)
-def newton_schulz_triton_dion(G: Tensor, epsilon: float = 1e-7):
+def newton_schulz_triton_muon_plus(G: Tensor, epsilon: float = 1e-7):
     """
     Triton implementation of Newton-Schulz iteration
     """
