@@ -7,13 +7,8 @@ underlying algorithm. So extra verification should be done before integrating it
 
 ## Changes
 
-For this implementation we started from the [dion implementation of newton schulz](https://github.com/microsoft/dion)
+For this implementation we started from the [implementation of newton schulz shipped aside the dion optimizer](https://github.com/microsoft/dion)
 which has a great triton implementation of the newton schulz algorithm.
-
-### triton kernel for ns_line_3:
-
-We noticed that the ns_line_3 function was taking a lot of time, so we wrote a triton kernel to avoid multiple
-loadings of the same data. This give a marginal speedup on small matrices, where loading data is the bottleneck.
 
 ### Fewer iterations:
 
@@ -27,18 +22,12 @@ Since the main operation to compute those correspond to ns_line_1,
 we can fuse it with the first newton schulz iterate. Furthermore this gives a better
 starting point for the newton schulz iterations as the matrix is closer to orthogonal
 
-Thanks to this, we can save one iteration of newton schulz. However, the non linear nature of AOL prevents us from
-using Jiacheng's approach to compute new polynomials factors. So we proposed two approaches to optimize our NS coeffs,
-via polynomial approximation of AOL's effect or genetic algorithms. This is done in the directory `hp_opt`.
+Thanks to this, we can save one iteration of newton schulz. 
 
-### Current work:
+### triton kernel for ns_line_3:
 
-First, we need to make sure our implementation is not changing the nature of the underlying iterative computation.
-Indeed, AOL rescaling has an effect of the polar factor of the matrix $U.V^T$ we are trying to compute. However,
-when matrices are relatively close to being column-orthogonal (which is mostly the case in high dimensions), 
-meaning this effect is small compared to the approximation error of the baseline NS algorithm.
-
-This is checked empirically in a GPT-2 like training setup in the `gradient-exploration` directory.
+We noticed that the ns_line_3 function was taking a lot of time, so we wrote a triton kernel to avoid multiple
+loadings of the same data. This give a marginal speedup on small matrices, where loading data is the bottleneck.
 
 ### Empirical validation:
 
@@ -48,13 +37,47 @@ respectively.
 
 ## Current results:
 
-Using a L40S GPU, we obtain a decent speedup:
+We can start by comparing pre-conditioning methods: AOL consistently
+outperforms the usual Frobenius normalization. When matrices
+get larger.
 
-![speedup graph](assets/speedup_evaluation.png)
+<img src="assets/polar_error_filtered_pure_AOL.png" alt="Preconditioning comparison" width="340px" />
 
-When tested on random uniform matrices, the matrices seems closer to orthogonal:
+In practice, preconditioning is effective: Applying AOL before
+the algorithm improves convergence speed, especially for large matrices. In
+this context, an iteration can be removed while still achieving an improved
+convergence.
 
-![orthogonality graph](assets/svs_2048x2048.png)
+<img src="assets/polar_error_filtered_annotated.png" alt="Convergence comparison" width="340px" />
+
+Building atop Muon+, which includes Triton
+kernels and dynamic polynomial parameters (1.7x faster), our approach adds
+an extra Triton kernel that unlocks moderate gains (2.2x faster). Finally,
+removing one iteration out of 5 also improves runtime (2.8x faster).
+
+<img src="assets/runtime_filtered_annotated.png" alt="Speed comparison" width="340" />
+
+This ultimately leads to a better compromise between polar error and runtime.
+
+<img src="assets/pareto/pareto_size8192.png" alt="Polar error vs time comparison" width="340" />
+
+### Drop in in nanogpt speedrun
+
+We trained a 144M GPT model on the FineWeb dataset up to the performance
+of GPT-2 and reported validation loss. We reused the fastest existing training
+script and replaced the Newton-Schulz implementation without changing any
+other parameters. Each line compared Turbo-Muon with baselines that have
+one extra iteration:
+
+| Turbo-Muon         | Muon+              | Muon               |
+| ------------------ | ------------------ | ------------------ |
+| 3.35 ± 0.002 (1it) | 3.35 ± 0.003 (2it) | 3.34 ± 0.002 (2it) |
+| 3.32 ± 0.001 (2it) | 3.31 ± 0.002 (3it) | 3.30 ± 0.002 (3it) |
+| 3.29 ± 0.001 (3it) | 3.29 ± 0.003 (4it) | 3.29 ± 0.005 (4it) |
+| 3.28 ± 0.001 (4it) | 3.28 ± 0.003 (5it) | 3.28 ± 0.001 (5it) |
+
+
+### Drop in in cifar speedrun
 
 On the cifar speedrun setup, we obtain similar final accuracies:
 
@@ -70,7 +93,7 @@ the model (even with fewer epochs). Also, we did not modify any hyperparameter f
 ## Citation
 
 ```
-@misc{lin2025flash,
+@misc{boissin2025flashnewtonschulz,
   author       = {Thibaut Boissin and Thomas Massena},
   title        = {flash-newton-schulz: AOL rescaling and triton kernel for newton schulz},
   year         = {2025},
