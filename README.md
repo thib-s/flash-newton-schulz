@@ -93,7 +93,7 @@ the model (even with fewer epochs). Also, we did not modify any hyperparameter f
 ## Citation
 
 ```
-@misc{boissin2025flashnewtonschulz,
+@misc{2025flashnewtonschulz,
   author       = {Thibaut Boissin and Thomas Massena},
   title        = {flash-newton-schulz: AOL rescaling and triton kernel for newton schulz},
   year         = {2025},
