@@ -25,7 +25,6 @@ def _get_autotune_configs():
                 "BLOCK_SIZE_N": bn,
                 "BLOCK_SIZE_K": bk,
                 "GROUP_SIZE_M": 8,
-                "LOWER_UPPER": 1,
             },
             num_stages=stages,
             num_warps=warps,
@@ -88,7 +87,6 @@ def ns_line_1_kernel(
     BLOCK_SIZE_N: tl.constexpr,
     BLOCK_SIZE_K: tl.constexpr,
     GROUP_SIZE_M: tl.constexpr,
-    LOWER_UPPER: tl.constexpr,
 ):
     """
     Input A has shape (M, K)
@@ -102,9 +100,7 @@ def ns_line_1_kernel(
     )
 
     # Skip blocks that don't need to be computed
-    skip_block_below_diag = (LOWER_UPPER == 0) and (n_idx + BLOCK_SIZE_N <= m_idx)
-    skip_block_above_diag = (LOWER_UPPER != 0) and (m_idx + BLOCK_SIZE_M <= n_idx)
-    if skip_block_below_diag or skip_block_above_diag:
+    if m_idx + BLOCK_SIZE_M <= n_idx:
         return
 
     # Index into one matrix of batch
@@ -204,7 +200,6 @@ def ns_line_2_kernel(
     BLOCK_SIZE_N: tl.constexpr,
     BLOCK_SIZE_K: tl.constexpr,
     GROUP_SIZE_M: tl.constexpr,
-    LOWER_UPPER: tl.constexpr,
 ):
     """
     Input A is square matrix with shape (M, M)
@@ -218,9 +213,7 @@ def ns_line_2_kernel(
     )
 
     # Skip blocks that don't need to be computed
-    skip_block_below_diag = (LOWER_UPPER == 0) and (n_idx + BLOCK_SIZE_N <= m_idx)
-    skip_block_above_diag = (LOWER_UPPER != 0) and (m_idx + BLOCK_SIZE_M <= n_idx)
-    if skip_block_below_diag or skip_block_above_diag:
+    if m_idx + BLOCK_SIZE_M <= n_idx:
         return
 
     # Index into one matrix of batch
@@ -315,26 +308,6 @@ def ns_line_2(A: Tensor, alpha: float, beta: float, *, out: Tensor = None):
     return out
 
 
-def _get_gemm_configs():
-    return [
-        triton.Config(
-            {
-                "BLOCK_SIZE_M": bm,
-                "BLOCK_SIZE_N": bn,
-                "BLOCK_SIZE_K": bk,
-                "GROUP_SIZE_M": 8,
-            },
-            num_stages=st,
-            num_warps=wp,
-        )
-        for bm in (64, 128)
-        for bn in (64, 128, 256)
-        for bk in (32, 64, 128)
-        for st, wp in ((3, 4), (4, 4), (3, 8))
-        if bm // bn <= 2 and bn // bm <= 2
-    ]
-
-
 @triton.jit
 def _pid_to_block_ns3(
     pid,
@@ -359,7 +332,7 @@ def _pid_to_block_ns3(
 
 
 @triton.autotune(
-    configs=_get_gemm_configs(),
+    configs=_get_autotune_configs(),
     key=["M", "N", "b_stride_r", "b_stride_c", "x_stride_r", "x_stride_c"],
 )
 @triton.jit
@@ -394,29 +367,43 @@ def ns_line_3_kernel(
     X_ptr += batch * x_stride_b
     C_ptr += batch * c_stride_b
 
-    # Create index ranges for the tile
+    # Index ranges for the tile
     offs_m = m_start + tl.arange(0, BLOCK_SIZE_M)
     offs_n = n_start + tl.arange(0, BLOCK_SIZE_N)
     offs_k = tl.arange(0, BLOCK_SIZE_K)
+
+    # Accumulator, initialized with alpha * X
+    x_bias_ptrs = X_ptr + offs_m[:, None] * x_stride_r + offs_n[None, :] * x_stride_c
+    acc = (
+        tl.load(
+            x_bias_ptrs,
+            mask=(offs_m[:, None] < M) & (offs_n[None, :] < N),
+            other=0.0,
+        )
+        * alpha
+    ).to(tl.float32)
 
     # Pointers to B and X tiles
     b_ptrs = B_ptr + offs_m[:, None] * b_stride_r + offs_k[None, :] * b_stride_c
     x_ptrs = X_ptr + offs_k[:, None] * x_stride_r + offs_n[None, :] * x_stride_c
 
-    # Accumulator, initialized with bias * alpha
-    x_bias_ptrs = X_ptr + offs_m[:, None] * x_stride_r + offs_n[None, :] * x_stride_c
-    acc = (
-        tl.load(
-            x_bias_ptrs, mask=(offs_m[:, None] < M) & (offs_n[None, :] < N), other=0.0
-        )
-        * alpha
-    ).to(tl.float32)
-
-    # GEMM main loop
+    # GEMM main loop: C += B @ X
     for k in tl.range(0, tl.cdiv(M, BLOCK_SIZE_K)):
-        b = tl.load(b_ptrs, mask=offs_k[None, :] < M - k * BLOCK_SIZE_K, other=0.0)
-        x = tl.load(x_ptrs, mask=offs_k[:, None] < M - k * BLOCK_SIZE_K, other=0.0)
+        k_remaining = M - k * BLOCK_SIZE_K
+
+        b = tl.load(
+            b_ptrs,
+            mask=(offs_m[:, None] < M) & (offs_k[None, :] < k_remaining),
+            other=0.0,
+        )
+        x = tl.load(
+            x_ptrs,
+            mask=(offs_k[:, None] < k_remaining) & (offs_n[None, :] < N),
+            other=0.0,
+        )
+
         acc = tl.dot(b, x, acc)
+
         b_ptrs += BLOCK_SIZE_K * b_stride_c
         x_ptrs += BLOCK_SIZE_K * x_stride_r
 
@@ -425,14 +412,19 @@ def ns_line_3_kernel(
 
     # Store result
     c_ptrs = C_ptr + offs_m[:, None] * c_stride_r + offs_n[None, :] * c_stride_c
-    mask = (offs_m[:, None] < M) & (offs_n[None, :] < N)
-    tl.store(c_ptrs, acc, mask=mask)
+    c_mask = (offs_m[:, None] < M) & (offs_n[None, :] < N)
+    tl.store(c_ptrs, acc, mask=c_mask)
 
 
 def ns_line_3(B: Tensor, X: Tensor, a: float, *, out: Tensor = None) -> Tensor:
     """
     Fused implementation of C = a * X + B @ X
-    B must be square & symmetric, X has same leading dim, arbitrary trailing cols.
+    B must be square & symmetric, X has same number of rows.
+    Supports:
+      - B: [M, M], X: [M, N]       (no batch)
+      - B: [M, M], X: [B, M, N]    (B broadcast)
+      - B: [1, M, M], X: [B, M, N] (B broadcast)
+      - B: [B, M, M], X: [B, M, N] (matched batch)
     """
     if B.shape[-2] != B.shape[-1]:
         raise ValueError("B must be square")
@@ -440,12 +432,43 @@ def ns_line_3(B: Tensor, X: Tensor, a: float, *, out: Tensor = None) -> Tensor:
     if B.shape[-2] != X.shape[-2]:
         raise ValueError("B and X must have the same number of rows")
 
-    # Broadcast & batch handling (supports 2‑ or 3‑D inputs)
     M, N = X.shape[-2:]
     batch = X.shape[0] if X.ndim == 3 else 1
 
+    # Decide batch stride for B (broadcast-aware)
+    if B.ndim == 2:
+        b_stride_b = 0  # broadcast B across batch
+    elif B.ndim == 3:
+        if X.ndim == 2:
+            if B.size(0) != 1:
+                raise ValueError("If X is 2D, batched B is only supported with B.size(0) == 1")
+            b_stride_b = 0  # single slice broadcast
+        else:
+            if B.size(0) == batch:
+                b_stride_b = B.stride(0)
+            elif B.size(0) == 1:
+                b_stride_b = 0  # broadcast B[0] across all X batches
+            else:
+                raise ValueError(
+                    f"Incompatible batch sizes: B.shape[0]={B.size(0)}, X.shape[0]={batch}"
+                )
+    else:
+        raise ValueError("B must be 2D or 3D")
+
     if out is None:
         out = torch.empty_like(X)
+
+    if out.shape[-2:] != (M, N):
+        raise ValueError(
+            f"out has wrong spatial shape, expected (*, {M}, {N}), got {out.shape}"
+        )
+    if out.ndim == 3 and batch != out.size(0):
+        raise ValueError(
+            f"out batch size {out.size(0)} does not match X batch size {batch}"
+        )
+
+    x_stride_b = X.stride(0) if X.ndim == 3 else 0
+    c_stride_b = out.stride(0) if out.ndim == 3 else 0
 
     grid = lambda meta: (
         batch
@@ -459,13 +482,13 @@ def ns_line_3(B: Tensor, X: Tensor, a: float, *, out: Tensor = None) -> Tensor:
         C_ptr=out,
         M=M,
         N=N,
-        b_stride_b=B.stride(0) if B.ndim == 3 else 0,
+        b_stride_b=b_stride_b,
         b_stride_r=B.stride(-2),
         b_stride_c=B.stride(-1),
-        x_stride_b=X.stride(0) if X.ndim == 3 else 0,
+        x_stride_b=x_stride_b,
         x_stride_r=X.stride(-2),
         x_stride_c=X.stride(-1),
-        c_stride_b=out.stride(0) if out.ndim == 3 else 0,
+        c_stride_b=c_stride_b,
         c_stride_r=out.stride(-2),
         c_stride_c=out.stride(-1),
         alpha=a,
