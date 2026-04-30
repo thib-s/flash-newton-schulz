@@ -1,7 +1,5 @@
 # Turbocharging Newton-Schulz with AOL Rescaling and Triton Kernels
 
-> Code for the paper: [Turbo-Muon: Accelerating Orthogonality-Based Optimization with Pre-Conditioning](https://hal.science/hal-05390446)
-
 TLDR: Orthogonality improving gradient preconditioning allows the removal of one costly Newton-Schulz iteration.
 
 ## Standalone code
@@ -108,19 +106,4 @@ On the cifar speedrun setup, we obtain similar final accuracies:
 This minor speedup is expected as the model is small, however, it does validate the equal capability of our approach to optimize
 the model (even with fewer epochs). Also, we did not modify any hyperparameter from the baseline NS run to replicate this result.
 
-## Citation
 
-```
-@unpublished{boissin:hal-05390446,
-  TITLE = {{Turbo-Muon: Accelerating Orthogonality-Based Optimization with Pre-Conditioning}},
-  AUTHOR = {Boissin, Thibaut and Massena, Thomas and Mamalet, Franck and Serrurier, Mathieu},
-  URL = {https://hal.science/hal-05390446},
-  NOTE = {working paper or preprint},
-  YEAR = {2025},
-  MONTH = Dec,
-  KEYWORDS = {Muon optimizer ; Newton-Schulz ; Nano-GPT ; Orthogonal Matrix},
-  PDF = {https://hal.science/hal-05390446v1/file/main.pdf},
-  HAL_ID = {hal-05390446},
-  HAL_VERSION = {v1},
-}
-```
